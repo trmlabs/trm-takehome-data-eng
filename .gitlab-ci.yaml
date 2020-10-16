@@ -1,0 +1,60 @@
+
+image: docker:19.03.13
+services:
+  - docker:19.03.13-dind
+
+stages:
+  - build
+  - deploy
+
+##############################################################################
+##                              Variables                                   ##
+##############################################################################
+variables:
+  APP_NAME: trm-takehome-data-eng
+  CI_REGISTRY_IMAGE: goolala/$APP_NAME
+  CD_CHART_REPO: trm-takehome-data-infra-wayne-h
+  CD_GIT_REPOSITORY: git@github.com:trmlabs/$CD_CHART_REPO.git
+  CD_MANIFEST_FILE: Chart.yaml
+  TAG: $CI_COMMIT_REF_NAME-$CI_COMMIT_SHORT_SHA
+
+##############################################################################
+##                              Custom Script                               ##
+##############################################################################
+before_script:
+  - echo $CI_REGISTRY_IMAGE:$TAG $PWD
+  # login
+  - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD
+
+after_script:
+  - docker image prune -af
+
+##############################################################################
+##                              Build Image                                 ##
+##############################################################################
+build_image:
+  stage: build
+  script:
+    # Docker Build && Push image
+    - cat Dockerfile
+    - docker pull $CI_REGISTRY_IMAGE:latest || true
+    - >
+      docker build
+      --network host
+      --cache-from $CI_REGISTRY_IMAGE:latest
+      --tag $CI_REGISTRY_IMAGE:$TAG
+      .
+    - docker push $CI_REGISTRY_IMAGE:$TAG
+
+
+##############################################################################
+##                              Deployments                                 ##
+##############################################################################
+tag_latest_image:
+  stage: deploy
+  variables:
+    GIT_STRATEGY: none
+  script:
+    - docker pull $CI_REGISTRY_IMAGE:$TAG
+    - docker tag $CI_REGISTRY_IMAGE:$TAG $CI_REGISTRY_IMAGE:latest
+    - docker push $CI_REGISTRY_IMAGE:latest
