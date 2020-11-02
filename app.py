@@ -1,55 +1,56 @@
-from google_auth_oauthlib import flow
-from google.cloud import bigquery
-from flask import Flask, request
 import psycopg2
+from flask import Flask, request
+from google.cloud import bigquery
+from google_auth_oauthlib import flow
 
 conn = None
-client=None
+client = None
 app = Flask(__name__)
+
 
 @app.route('/authenticate',  methods=['GET'])
 def authenticate():
-  """This function needs to be called to sign in to the google cloud and 
-  be able to access the bigquery. It also logs into the postgresql database
-  """
-  global client, conn
-  conn = psycopg2.connect(
-    host="localhost",  # change this values accordingly to connect to your postgresql database
-    database="trm_db",
-    user="user",
-    password="password")
-  
-  launch_browser = True
-  appflow = flow.InstalledAppFlow.from_client_secrets_file(
-    "client_secrets.json", scopes=["https://www.googleapis.com/auth/bigquery"]
-  )
+    """This function needs to be called to sign in to the google cloud and
+    be able to access the bigquery. It also logs into the postgresql database
+    """
+    global client, conn
+    conn = psycopg2.connect(
+        host="localhost",  # change this values accordingly to connect to your postgresql database
+        database="trm_db",
+        user="user",
+        password="password")
 
-  if launch_browser:
-    appflow.run_local_server()
-  else:
-    appflow.run_console()
+    launch_browser = True
+    appflow = flow.InstalledAppFlow.from_client_secrets_file(
+        "client_secrets.json", scopes=["https://www.googleapis.com/auth/bigquery"]
+    )
 
-  credentials = appflow.credentials
-  project = 'trm-takehome-greg-d'
-  client = bigquery.Client(project=project, credentials=credentials)
+    if launch_browser:
+        appflow.run_local_server()
+    else:
+        appflow.run_console()
 
-  return {"data":"authentication was successful"}
+    credentials = appflow.credentials
+    project = 'trm-takehome-greg-d'
+    client = bigquery.Client(project=project, credentials=credentials)
+
+    return {"data": "authentication was successful"}
 
 
 @app.route('/fetch_bigquery_data',  methods=['GET'])
 def fetch():
-  """
-  This function is used to fetch data from the bigquery and save it 
-  to PostgreSQL database so that it can be used for answering queries.
+    """
+    This function is used to fetch data from the bigquery and save it
+    to PostgreSQL database so that it can be used for answering queries.
 
-  This function will need to be called daily to retrieve new updates to 
-  the blockchain. 
-  """
+    This function will need to be called daily to retrieve new updates to
+    the blockchain.
+    """
 
-  start_date = request.args.get('startdate', '2020-10-01T00:00:00Z')
-  end_date = request.args.get('enddate', '2020-10-02T00:00:00Z')
+    start_date = request.args.get('startdate', '2020-10-01T00:00:00Z')
+    end_date = request.args.get('enddate', '2020-10-02T00:00:00Z')
 
-  query_string = """
+    query_string = """
   SELECT
     input_address AS sender,
     output_address AS receiver,
@@ -73,52 +74,52 @@ def fetch():
   LIMIT 10000
   """
 
-  job_config = bigquery.QueryJobConfig(
-      query_parameters=[
-          bigquery.ScalarQueryParameter("start_date", "STRING", start_date),
-          bigquery.ScalarQueryParameter("end_date", "STRING", end_date),
-      ]
-  )
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("start_date", "STRING", start_date),
+            bigquery.ScalarQueryParameter("end_date", "STRING", end_date),
+        ]
+    )
 
-  query_job = client.query(query_string, job_config=job_config)
-  
-  # Print the results.
-  out = []
-  for row in query_job.result():  # Wait for the job to complete.
-    out.append((row["sender"],
-                row["receiver"],
-                row["total_value"],
-                row["day"]))
+    query_job = client.query(query_string, job_config=job_config)
 
-  query = "INSERT INTO daily_transfers (sender, receiver, total_value, date) VALUES (%s, %s, %s, %s)"
-  cur = conn.cursor()
-  cur.executemany(query, out)
-  conn.commit()
-  cur.close()
+    # Print the results.
+    out = []
+    for row in query_job.result():  # Wait for the job to complete.
+        out.append((row["sender"],
+                    row["receiver"],
+                    row["total_value"],
+                    row["day"]))
 
-  return {"data": 'fetch', "success": True} 
+    query = "INSERT INTO daily_transfers (sender, receiver, total_value, date) VALUES (%s, %s, %s, %s)"
+    cur = conn.cursor()
+    cur.executemany(query, out)
+    conn.commit()
+    cur.close()
+
+    return {"data": 'fetch', "success": True}
 
 
 @app.route('/address/exposure/direct',  methods=['GET'])
 def address_exposure_direct():
-  global conn
-  address  = request.args.get('address', None)
-  start_date = request.args.get('startdate', '0001-01-01T00:00:00Z')
-  end_date = request.args.get('enddate', '9999-12-31T23:59:59Z')
-  flow_type = request.args.get('flowtype', 'both')
-  limit = request.args.get('limit', 100)
-  offset = request.args.get('offset', 0)
+    global conn
+    address = request.args.get('address', None)
+    start_date = request.args.get('startdate', '0001-01-01T00:00:00Z')
+    end_date = request.args.get('enddate', '9999-12-31T23:59:59Z')
+    flow_type = request.args.get('flowtype', 'both')
+    limit = request.args.get('limit', 100)
+    offset = request.args.get('offset', 0)
 
-  if address is None:
-    return {"data": "Error: missing address", "success": False}
-  
-  output_ordering = "totalflow"
-  if flow_type == "inflow":
-    output_ordering = "inflow"
-  elif flow_type == "outflow":
-    output_ordering = "outflow"
-  
-  query_string=f"""
+    if address is None:
+        return {"data": "Error: missing address", "success": False}
+
+    output_ordering = "totalflow"
+    if flow_type == "inflow":
+        output_ordering = "inflow"
+    elif flow_type == "outflow":
+        output_ordering = "outflow"
+
+    query_string = f"""
   WITH outflow_data AS (
   SELECT
     sender,
@@ -191,13 +192,13 @@ def address_exposure_direct():
   OFFSET {offset}
   """
 
-  cur = conn.cursor()
-  cur.execute(query_string)
-  out = []
-  for a,c,o,i,t in cur:  
-    out.append({"address": c,
-                "inflows": i,
-                "outflows": o,
-                "total_flows": t})
+    cur = conn.cursor()
+    cur.execute(query_string)
+    out = []
+    for a, c, o, i, t in cur:
+        out.append({"address": c,
+                    "inflows": i,
+                    "outflows": o,
+                    "total_flows": t})
 
-  return {"data": out, "success": True} 
+    return {"data": out, "success": True}
