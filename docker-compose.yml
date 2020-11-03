@@ -31,4 +31,3 @@ services:
       POSTGRES_DB: TRMLabs
     ports:
       - "5442:5432"
-      
