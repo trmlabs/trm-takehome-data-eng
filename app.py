@@ -15,14 +15,16 @@ def authenticate():
     """
     global client, conn
     conn = psycopg2.connect(
-        host="localhost",  # change this values accordingly to connect to your postgresql database
-        database="trm_db",
+        host="localhost",
+        database="TRMLabs",
         user="user",
-        password="password")
+        password="password",
+        port="5440")
 
     launch_browser = True
     appflow = flow.InstalledAppFlow.from_client_secrets_file(
-        "client_secrets.json", scopes=["https://www.googleapis.com/auth/bigquery"]
+        "client_secrets.json",
+        scopes=["https://www.googleapis.com/auth/bigquery"]
     )
 
     if launch_browser:
@@ -47,15 +49,15 @@ def fetch():
     the blockchain.
     """
 
-    start_date = request.args.get('startdate', '2020-10-01T00:00:00Z')
-    end_date = request.args.get('enddate', '2020-10-02T00:00:00Z')
+    start_date = request.args.get('startdate', '2020-10-27T00:00:00Z')
+    end_date = request.args.get('enddate', '2020-11-02T00:00:00Z')
 
     query_string = """
   SELECT
     input_address AS sender,
     output_address AS receiver,
     SUM(SAFE_DIVIDE(LEAST(input_value, output_value), POW(10, 8))) AS total_value,
-    DATE_TRUNC(block_timestamp_month , DAY) as day
+    CAST(DATE(block_timestamp) AS DATE) as day
   FROM
     `bigquery-public-data.crypto_bitcoin.transactions`,
     UNNEST(inputs) AS input,
@@ -64,7 +66,7 @@ def fetch():
     UNNEST(output.addresses) AS output_address
   WHERE
     block_timestamp >= @start_date AND
-    block_timestamp <= @end_date 
+    block_timestamp <= @end_date
   GROUP BY
     sender,
     receiver,
@@ -130,7 +132,7 @@ def address_exposure_direct():
   WHERE
     (sender = '{address}' OR receiver = '{address}') AND
     date >= '{start_date}' AND
-    date <= '{end_date}' 
+    date <= '{end_date}'
   GROUP BY
     sender,
     receiver
@@ -139,7 +141,7 @@ def address_exposure_direct():
   ),
 
   outflow_table AS (
-  SELECT 
+  SELECT
     od.sender as address_of_interest,
     od.receiver as counterpart,
     od.total_value as outflow,
@@ -150,7 +152,7 @@ def address_exposure_direct():
   WHERE od.sender= '{address}'
   ),
   inflow_table AS (
-  SELECT 
+  SELECT
     od.receiver as address_of_interest,
     od.sender as counterpart,
     od.total_value as inflow,
@@ -163,22 +165,22 @@ def address_exposure_direct():
 
   SELECT
     address_of_interest,
-    counterpart, 
-    sum(d.outflow) as outflow, 
+    counterpart,
+    sum(d.outflow) as outflow,
     sum(d.inflow) as inflow,
     sum(d.total_flow) as totalflow
   FROM (
     SELECT
       address_of_interest,
-      counterpart, 
+      counterpart,
       outflow,
       inflow,
       total_flow
-    FROM inflow_table 
+    FROM inflow_table
       UNION ALL
     SELECT
       address_of_interest,
-      counterpart, 
+      counterpart,
       outflow,
       inflow,
       total_flow FROM outflow_table
@@ -186,7 +188,7 @@ def address_exposure_direct():
   GROUP BY
     address_of_interest,
     counterpart
-  order by 
+  order by
     {output_ordering} desc
   LIMIT {limit}
   OFFSET {offset}
@@ -195,7 +197,7 @@ def address_exposure_direct():
     cur = conn.cursor()
     cur.execute(query_string)
     out = []
-    for a, c, o, i, t in cur:
+    for _, c, o, i, t in cur:
         out.append({"address": c,
                     "inflows": i,
                     "outflows": o,
