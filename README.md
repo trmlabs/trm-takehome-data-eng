@@ -58,4 +58,5 @@ You should see the following response:
 }
 ```
 
-
+**9. Shut down the postgresql cluster**
+`docker-compose down`
