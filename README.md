@@ -1,11 +1,19 @@
 ## Overview
 
-This repo provides the boiler plate required to setup the API for the takehome BONUS section. 
+This is a prototype that is using database sharding.
+In this setup we have 3 seprate database servers running.
+There is one master database to which the web server communicates.
+The other two database servers are hidden away from the web server.
 
-This repo assumes: 
-- Familiarity with Python
-- Understanding of basic HTTP request semantics
-- Installed Conda as a package manager
+The data is partitioned over the three database servers.
+We have partitioned the data by day and each server holds partitions for two seprate days.
+All together we are storing data for six days.
+With this setup, when the master server recives a query that spans 6 days, it will forward the query to the
+remote servers that contain the relevant days and then combine the results together.
+Afterwards, the result is returned to the web server. 
+
+To run this prototype you will need to have Docker and Docker-compose installed on your computer.
+
 
 ## Getting Started
 
@@ -15,14 +23,28 @@ This repo assumes:
 **2. Install the required dependencies**
 `conda install -n <env_name> requirements.txt`
 
-**3. Run the local flask Development Server**
+**3. Start the postgres database cluster**
+`docker-compose up`
+
+**4. Setup the data partitions on the cluster**
+`python initialize_db.py`
+
+**5. Run the local flask Development Server**
 ```
 export FLASK_APP=app.py
 export FLASK_ENV=development
 flask run
 ```
 
-**4. Hit the endpoint from your local browser**
+**6. Authenticate the web server with the TRM Labs account**
+Enter `http://127.0.0.1:5000/authenticate` into your browser.
+You will be able to select account with which you want to authenticate.
+
+**7. Extract data from Big Query and load it into postgresql cluster**
+Enter `http://127.0.0.1:5000/fetch_bigquery_data` into your browser.
+
+
+**8. Hit the endpoint from your local browser**
 Enter `http://127.0.0.1:5000/address/exposure/direct?address=1BQAPyku1ZibWGAgd8QePpW1vAKHowqLez` into your browser!
 
 You should see the following response:
@@ -35,14 +57,5 @@ You should see the following response:
   "success": True
 }
 ```
-
-## Additional Details
-
-Depending on your data store, you may have to install one or more packages
-to connect via Python. I have listed the most common packages below:
-- RedShift/Postgres: [Psycopg2](https://pypi.org/project/psycopg2/)
-- MySQL: [mysqlclient](https://pypi.python.org/pypi/mysqlclient)
-- BigQuery: [google-cloud-bigquery](https://pypi.org/project/google-cloud-bigquery/)
-
 
 
